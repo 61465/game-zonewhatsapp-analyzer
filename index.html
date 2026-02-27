@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Game Zone | محلال الواتساب</title>
+    <title>Game Zone | محلل الواتساب</title>
     <style>
         :root {
             --gold: #D4AF37;
@@ -101,12 +101,40 @@
             border-radius: 5px;
         }
 
-        .stat-card h3 { color: var(--gold); margin-top: 0; }
+        .stat-card h3 { 
+            color: var(--gold); 
+            margin-top: 0; 
+            border-bottom: 1px solid #333;
+            padding-bottom: 8px;
+        }
+
+        /* شبكة الإحصائيات السريعة */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .metric-item {
+            background: var(--black);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            border: 1px solid var(--gold);
+        }
+
+        .metric-value {
+            color: var(--gold);
+            font-size: 28px;
+            font-weight: bold;
+        }
 
         table {
             width: 100%;
             border-collapse: collapse;
             margin-top: 10px;
+            background: var(--black);
         }
 
         table th, table td {
@@ -115,7 +143,35 @@
             text-align: center;
         }
 
-        table th { background: var(--gold); color: var(--black); }
+        table th { 
+            background: var(--gold); 
+            color: var(--black); 
+        }
+
+        .error-message {
+            color: #ff6b6b;
+            background: rgba(255, 107, 107, 0.1);
+            padding: 15px;
+            border-radius: 8px;
+            border-right: 5px solid #ff6b6b;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: #333;
+            border-radius: 2px;
+            margin: 10px 0;
+            display: none;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--gold);
+            width: 0%;
+            border-radius: 2px;
+            transition: width 0.3s;
+        }
     </style>
 </head>
 <body>
@@ -132,17 +188,42 @@
         </label>
         <input type="file" id="fileInput" accept=".txt">
         <div id="loader">⏳</div>
+        <div class="progress-bar" id="progressBar">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
     </div>
 
     <div id="results" class="results">
         <div class="stat-card">
-            <h3>📊 إحصائيات عامة</h3>
-            <p id="totalMsgs"></p>
+            <h3>📊 إحصائيات سريعة</h3>
+            <div class="metrics-grid">
+                <div class="metric-item">
+                    <div>إجمالي الرسائل</div>
+                    <div class="metric-value" id="totalMsgs">0</div>
+                </div>
+                <div class="metric-item">
+                    <div>عدد المشاركين</div>
+                    <div class="metric-value" id="totalUsers">0</div>
+                </div>
+                <div class="metric-item">
+                    <div>متوسط الكلمات</div>
+                    <div class="metric-value" id="avgWords">0</div>
+                </div>
+            </div>
         </div>
 
         <div class="stat-card">
             <h3>👥 الرسائل لكل شخص</h3>
-            <div id="userStats"></div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>المستخدم</th>
+                        <th>عدد الرسائل</th>
+                        <th>النسبة</th>
+                    </tr>
+                </thead>
+                <tbody id="userStats"></tbody>
+            </table>
         </div>
 
         <div class="stat-card">
@@ -160,52 +241,102 @@
     </div>
 
     <script>
+        // قائمة الكلمات الشائعة للتجاهل (Stopwords)
+        const STOP_WORDS = new Set([
+            'من', 'على', 'في', 'إلى', 'هذا', 'كان', 'أو', 'ما', 'لا', 'هل', 
+            'يا', 'إلي', 'تم', 'عن', 'مع', 'هذه', 'اللي', 'ان', 'اللى', 'أنا',
+            'انت', 'إلي', 'عند', 'كانت', 'علي', 'بين', 'كل', 'تحت', 'فوق',
+            'كانوا', 'هو', 'هي', 'هم', 'هن', 'انا', 'انت', 'انتي', 'انتم',
+            'نحن', 'هذا', 'هذه', 'ذلك', 'تلك', 'اي', 'اية', 'اذاً', 'اذا',
+            'لم', 'لن', 'له', 'لها', 'لهم', 'لهن'
+        ]);
+
         document.getElementById('fileInput').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
 
             const loader = document.getElementById('loader');
+            const progressBar = document.getElementById('progressBar');
+            const progressFill = document.getElementById('progressFill');
             const resultsDiv = document.getElementById('results');
             
             loader.style.display = 'block';
+            progressBar.style.display = 'block';
             resultsDiv.style.display = 'none';
+            
+            // تحديث التقدم
+            let progress = 0;
+            const interval = setInterval(() => {
+                progress += 10;
+                progressFill.style.width = progress + '%';
+                if (progress >= 100) clearInterval(interval);
+            }, 200);
 
+            // قراءة الملف مع معالجة الترميز
             const reader = new FileReader();
             reader.onload = function(event) {
-                // محاكاة وقت التحليل لإظهار الساعة الرملية
+                // محاكاة وقت التحليل
                 setTimeout(() => {
                     analyzeData(event.target.result);
                     loader.style.display = 'none';
+                    progressBar.style.display = 'none';
                     resultsDiv.style.display = 'block';
-                }, 2000);
+                }, 1000);
             };
-            reader.readAsText(file);
+            
+            // محاولة قراءة بترميزات مختلفة
+            try {
+                reader.readAsText(file, 'UTF-8');
+            } catch (e) {
+                reader.readAsText(file);
+            }
         });
 
         function analyzeData(text) {
+            // تنظيف النص من رموز BOM المخفية
+            text = text.replace(/^\uFEFF/, '');
+            
             const lines = text.split('\n');
+            
+            // أنماط Regex المتعددة (مثل كود Python)
+            const patterns = [
+                /^.*?(\d{1,4}[\/\.-]\d{1,2}[\/\.-]\d{2,4}).*?(\d{1,2}:\d{2}).*?-\s(.*?):\s(.*)/,
+                /^\[?(\d{1,4}[\/\.-]\d{1,2}[\/\.-]\d{2,4}).*?(\d{1,2}:\d{2}).*?\]\s(.*?):\s(.*)/
+            ];
+            
             let totalMessages = 0;
             let userMap = {};
             let wordsMap = {};
-
-            // نمط بسيط لاستخراج الاسم والرسالة
-            // ملاحظة: قد يختلف النمط حسب لغة الهاتف (عربي/إنجليزي)
-            const regex = /-\s(.*?):\s(.*)/;
+            let totalWords = 0;
 
             lines.forEach(line => {
-                const match = line.match(regex);
+                line = line.trim();
+                if (!line) return;
+                
+                let match = null;
+                for (let pattern of patterns) {
+                    match = line.match(pattern);
+                    if (match) break;
+                }
+                
                 if (match) {
                     totalMessages++;
-                    const user = match[1];
-                    const msg = match[2].toLowerCase();
-
+                    const user = match[3];
+                    const msg = match[4].toLowerCase();
+                    
                     // حساب رسائل الأشخاص
                     userMap[user] = (userMap[user] || 0) + 1;
-
+                    
+                    // تنظيف الرسالة من الرموز
+                    const cleanMsg = msg.replace(/[^\w\s\u0600-\u06FF]/g, ' ');
+                    
                     // حساب الكلمات
-                    const words = msg.split(/\s+/);
+                    const words = cleanMsg.split(/\s+/).filter(w => w.length >= 3);
+                    totalWords += words.length;
+                    
                     words.forEach(word => {
-                        if (word.length > 2) { // تجاهل الكلمات القصيرة جداً
+                        // تجاهل الأرقام والكلمات الشائعة
+                        if (!STOP_WORDS.has(word) && !/^\d+$/.test(word)) {
                             wordsMap[word] = (wordsMap[word] || 0) + 1;
                         }
                     });
@@ -213,13 +344,30 @@
             });
 
             // عرض النتائج
-            document.getElementById('totalMsgs').innerText = `إجمالي عدد الرسائل المحللة: ${totalMessages}`;
-
-            // عرض إحصائيات المستخدمين
-            let userHtml = "";
-            for (let user in userMap) {
-                userHtml += `<p><strong>${user}:</strong> ${userMap[user]} رسالة</p>`;
+            if (totalMessages === 0) {
+                showError('لم يتم العثور على رسائل صالحة. تأكد من صيغة الملف.');
+                return;
             }
+
+            // إحصائيات سريعة
+            document.getElementById('totalMsgs').innerText = totalMessages.toLocaleString();
+            document.getElementById('totalUsers').innerText = Object.keys(userMap).length;
+            document.getElementById('avgWords').innerText = (totalWords / totalMessages).toFixed(1);
+
+            // عرض إحصائيات المستخدمين مع النسب المئوية
+            let userHtml = "";
+            const sortedUsers = Object.entries(userMap).sort((a, b) => b[1] - a[1]);
+            
+            sortedUsers.forEach(([user, count]) => {
+                const percentage = ((count / totalMessages) * 100).toFixed(1);
+                userHtml += `
+                    <tr>
+                        <td>${escapeHtml(user)}</td>
+                        <td>${count.toLocaleString()}</td>
+                        <td>${percentage}%</td>
+                    </tr>
+                `;
+            });
             document.getElementById('userStats').innerHTML = userHtml;
 
             // عرض أكثر 10 كلمات
@@ -228,10 +376,23 @@
                 .slice(0, 10);
 
             let wordHtml = "";
-            sortedWords.forEach(w => {
-                wordHtml += `<tr><td>${w[0]}</td><td>${w[1]}</td></tr>`;
+            sortedWords.forEach(([word, count]) => {
+                wordHtml += `<tr><td>${escapeHtml(word)}</td><td>${count.toLocaleString()}</td></tr>`;
             });
             document.getElementById('wordBody').innerHTML = wordHtml;
+        }
+
+        function showError(message) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.style.display = 'block';
+            resultsDiv.innerHTML = `<div class="error-message">❌ ${message}</div>`;
+        }
+
+        // دالة لمنع XSS
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
     </script>
 </body>

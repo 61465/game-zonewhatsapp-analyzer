@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Zone | محلال الواتساب</title>
+    <style>
+        :root {
+            --gold: #D4AF37;
+            --dark-gold: #AA8A2E;
+            --black: #0a0a0a;
+            --dark-grey: #1a1a1a;
+            --text-light: #e0e0e0;
+        }
+
+        body {
+            background-color: var(--black);
+            color: var(--text-light);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .header {
+            text-align: center;
+            border-bottom: 2px solid var(--gold);
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+            width: 100%;
+            max-width: 800px;
+        }
+
+        .header h1 {
+            color: var(--gold);
+            font-size: 3rem;
+            margin: 0;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .upload-container {
+            background: var(--dark-grey);
+            padding: 30px;
+            border-radius: 15px;
+            border: 1px solid var(--gold);
+            box-shadow: 0 0 20px rgba(212, 175, 55, 0.2);
+            text-align: center;
+            width: 100%;
+            max-width: 500px;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .custom-file-upload {
+            display: inline-block;
+            padding: 12px 24px;
+            cursor: pointer;
+            background: var(--gold);
+            color: var(--black);
+            font-weight: bold;
+            border-radius: 5px;
+            transition: 0.3s;
+        }
+
+        .custom-file-upload:hover {
+            background: var(--dark-gold);
+        }
+
+        /* تأثير الساعة الرملية */
+        #loader {
+            display: none;
+            margin: 20px auto;
+            font-size: 50px;
+            color: var(--gold);
+            animation: flip 2s infinite;
+        }
+
+        @keyframes flip {
+            0% { transform: rotate(0deg); }
+            50% { transform: rotate(180deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .results {
+            margin-top: 30px;
+            width: 100%;
+            max-width: 800px;
+            display: none;
+        }
+
+        .stat-card {
+            background: var(--dark-grey);
+            padding: 15px;
+            margin: 10px 0;
+            border-right: 5px solid var(--gold);
+            border-radius: 5px;
+        }
+
+        .stat-card h3 { color: var(--gold); margin-top: 0; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        table th, table td {
+            border: 1px solid #333;
+            padding: 10px;
+            text-align: center;
+        }
+
+        table th { background: var(--gold); color: var(--black); }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>GAME ZONE</h1>
+        <p>محلل بيانات واتساب الاحترافي</p>
+    </div>
+
+    <div class="upload-container">
+        <p>ارفع ملف المحادثة (.txt)</p>
+        <label for="fileInput" class="custom-file-upload">
+            اختيار الملف
+        </label>
+        <input type="file" id="fileInput" accept=".txt">
+        <div id="loader">⏳</div>
+    </div>
+
+    <div id="results" class="results">
+        <div class="stat-card">
+            <h3>📊 إحصائيات عامة</h3>
+            <p id="totalMsgs"></p>
+        </div>
+
+        <div class="stat-card">
+            <h3>👥 الرسائل لكل شخص</h3>
+            <div id="userStats"></div>
+        </div>
+
+        <div class="stat-card">
+            <h3>🏆 أكثر 10 كلمات تكراراً</h3>
+            <table id="wordTable">
+                <thead>
+                    <tr>
+                        <th>الكلمة</th>
+                        <th>التكرار</th>
+                    </tr>
+                </thead>
+                <tbody id="wordBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const loader = document.getElementById('loader');
+            const resultsDiv = document.getElementById('results');
+            
+            loader.style.display = 'block';
+            resultsDiv.style.display = 'none';
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                // محاكاة وقت التحليل لإظهار الساعة الرملية
+                setTimeout(() => {
+                    analyzeData(event.target.result);
+                    loader.style.display = 'none';
+                    resultsDiv.style.display = 'block';
+                }, 2000);
+            };
+            reader.readAsText(file);
+        });
+
+        function analyzeData(text) {
+            const lines = text.split('\n');
+            let totalMessages = 0;
+            let userMap = {};
+            let wordsMap = {};
+
+            // نمط بسيط لاستخراج الاسم والرسالة
+            // ملاحظة: قد يختلف النمط حسب لغة الهاتف (عربي/إنجليزي)
+            const regex = /-\s(.*?):\s(.*)/;
+
+            lines.forEach(line => {
+                const match = line.match(regex);
+                if (match) {
+                    totalMessages++;
+                    const user = match[1];
+                    const msg = match[2].toLowerCase();
+
+                    // حساب رسائل الأشخاص
+                    userMap[user] = (userMap[user] || 0) + 1;
+
+                    // حساب الكلمات
+                    const words = msg.split(/\s+/);
+                    words.forEach(word => {
+                        if (word.length > 2) { // تجاهل الكلمات القصيرة جداً
+                            wordsMap[word] = (wordsMap[word] || 0) + 1;
+                        }
+                    });
+                }
+            });
+
+            // عرض النتائج
+            document.getElementById('totalMsgs').innerText = `إجمالي عدد الرسائل المحللة: ${totalMessages}`;
+
+            // عرض إحصائيات المستخدمين
+            let userHtml = "";
+            for (let user in userMap) {
+                userHtml += `<p><strong>${user}:</strong> ${userMap[user]} رسالة</p>`;
+            }
+            document.getElementById('userStats').innerHTML = userHtml;
+
+            // عرض أكثر 10 كلمات
+            const sortedWords = Object.entries(wordsMap)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10);
+
+            let wordHtml = "";
+            sortedWords.forEach(w => {
+                wordHtml += `<tr><td>${w[0]}</td><td>${w[1]}</td></tr>`;
+            });
+            document.getElementById('wordBody').innerHTML = wordHtml;
+        }
+    </script>
+</body>
+</html>

@@ -27,15 +27,23 @@ class WhatsAppAnalyzer:
         self.df = None
 
     def parse_data(self):
-        """تحويل النص الخام إلى DataFrame منظم"""
-        # نمط Regex ذكي يدعم معظم تنسيقات أندرويد وآيفون
-        pattern = r'(\d{1,2}/\d{1,2}/\d{2,4}),\s(\d{1,2}:\d{2}(?::\d{2})?\s?[APM]*)\s-\s([^:]+):\s(.+)'
+        """نسخة مطورة تدعم جميع أنواع الهواتف واللغات"""
+        # هذا النمط يبحث عن (تاريخ - ثم وقت - ثم اسم الشخص) بشكل مرن جداً
+        pattern = r'^.?(\d{1,4}[/\.-]\d{1,2}[/\.-]\d{2,4}).*?(\d{1,2}:\d{2}).*?-\s(.*?):\s(.*)'
         
         extracted_data = []
         for line in self.lines:
+            # تنظيف السطر من الأحرف المخفية في بداية ملفات الواتساب
+            line = line.encode('utf-8').decode('utf-8-sig').strip()
             match = re.match(pattern, line)
             if match:
                 extracted_data.append(match.groups())
+            else:
+                # محاولة لنمط الآيفون (الذي يضع التاريخ بين أقواس)
+                iphone_pattern = r'^\[?(\d{1,4}[/\.-]\d{1,2}[/\.-]\d{2,4}).*?(\d{1,2}:\d{2}).*?\]\s(.*?):\s(.*)'
+                match_ip = re.match(iphone_pattern, line)
+                if match_ip:
+                    extracted_data.append(match_ip.groups())
         
         self.df = pd.DataFrame(extracted_data, columns=['Date', 'Time', 'User', 'Message'])
         return self.df

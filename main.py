@@ -1,122 +1,84 @@
-import streamlit as st
-import pandas as pd
-import re
-import plotly.express as px
-from collections import Counter
-import time
+# أضف هذا الاستيراد في بداية الملف
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from reportlab.lib.utils import ImageReader
+import io
+import matplotlib.pyplot as plt
+import tempfile
+import os
 
-# --- إعدادات الصفحة والهوية البصرية ---
-st.set_page_config(page_title="Game Zone | WhatsApp Analyzer", layout="wide")
-
-# تصميم CSS مخصص للثيم الأسود والذهبي
-st.markdown("""
-    <style>
-    .main { background-color: #0a0a0a; color: #e0e0e0; }
-    .stMetric { background-color: #1a1a1a; border-right: 5px solid #D4AF37; padding: 15px; border-radius: 5px; }
-    div[data-testid="stMetricValue"] { color: #D4AF37; }
-    .css-10trblm { color: #D4AF37; } /* العناوين */
-    h1, h2, h3 { color: #D4AF37 !important; border-bottom: 1px solid #333; }
-    .stButton>button { background-color: #D4AF37; color: black; border-radius: 20px; width: 100%; font-weight: bold; }
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- وظائف معالجة البيانات ---
-class WhatsAppAnalyzer:
-    def __init__(self, file_lines):
-        self.lines = file_lines
-        self.df = None
-
-    def parse_data(self):
-        """نسخة مطورة تدعم جميع أنواع الهواتف واللغات"""
-        # هذا النمط يبحث عن (تاريخ - ثم وقت - ثم اسم الشخص) بشكل مرن جداً
-        pattern = r'^.?(\d{1,4}[/\.-]\d{1,2}[/\.-]\d{2,4}).*?(\d{1,2}:\d{2}).*?-\s(.*?):\s(.*)'
-        
-        extracted_data = []
-        for line in self.lines:
-            # تنظيف السطر من الأحرف المخفية في بداية ملفات الواتساب
-            line = line.encode('utf-8').decode('utf-8-sig').strip()
-            match = re.match(pattern, line)
-            if match:
-                extracted_data.append(match.groups())
-            else:
-                # محاولة لنمط الآيفون (الذي يضع التاريخ بين أقواس)
-                iphone_pattern = r'^\[?(\d{1,4}[/\.-]\d{1,2}[/\.-]\d{2,4}).*?(\d{1,2}:\d{2}).*?\]\s(.*?):\s(.*)'
-                match_ip = re.match(iphone_pattern, line)
-                if match_ip:
-                    extracted_data.append(match_ip.groups())
-        
-        self.df = pd.DataFrame(extracted_data, columns=['Date', 'Time', 'User', 'Message'])
-        return self.df
-
-    def get_top_words(self, n=10):
-        """تحليل الكلمات مع تصفية الكلمات الشائعة"""
-        # قائمة الكلمات التي يجب تجاهلها (Stopwords)
-        stop_words = set(['من', 'على', 'في', 'إلى', 'هذا', 'كان', 'أو', 'ما', 'لا', 'هل', 'يا', 'إلي', 'تم', 'عن', 'مع', 'هذه', 'اللي', 'ان', 'اللى'])
-        
-        all_text = " ".join(self.df['Message']).lower()
-        # تنظيف النص من الرموز
-        words = re.findall(r'\b\w{3,}\b', all_text) # الكلمات التي طولها أكثر من 2 حرف فقط
-        filtered_words = [word for word in words if word not in stop_words]
-        
-        return Counter(filtered_words).most_common(n)
-
-# --- واجهة المستخدم ---
-st.title("🎮 GAME ZONE - WHATSAPP ANALYZER")
-st.write("حلل محادثاتك بأسلوب المحترفين")
-
-uploaded_file = st.file_uploader("قم برفع ملف الدردشة (txt)", type="txt")
-
-if uploaded_file:
-    # قراءة البيانات
-    bytes_data = uploaded_file.getvalue().decode("utf-8").splitlines()
-    analyzer = WhatsAppAnalyzer(bytes_data)
+# أضف هذه الدالة داخل class WhatsAppAnalyzer أو كدالة منفصلة
+def generate_pdf_report(df, analyzer):
+    """توليد تقرير PDF بالإحصائيات"""
     
-    # تأثير التحميل (الساعة الرملية)
-    with st.status("جاري استخراج البيانات وتحليلها...", expanded=True) as status:
-        st.write("🔍 فحص بنية الملف...")
-        df = analyzer.parse_data()
-        time.sleep(1)
-        st.write("📊 حساب الإحصائيات الشخصية...")
-        time.sleep(1)
-        st.write("🧠 تحليل الكلمات الأكثر تكراراً...")
-        status.update(label="اكتمل التحليل بنجاح!", state="complete", expanded=False)
+    pdf_buffer = io.BytesIO()
+    c = canvas.Canvas(pdf_buffer, pagesize=letter)
+    width, height = letter
+    
+    # عنوان التقرير
+    c.setFillColorRGB(0.8, 0.6, 0.2)  # ذهبي
+    c.setFont("Helvetica-Bold", 20)
+    c.drawString(50, height - 50, "Game Zone - WhatsApp Analysis Report")
+    
+    # إحصائيات سريعة
+    c.setFillColorRGB(0, 0, 0)  # أسود
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(50, height - 100, f"إجمالي الرسائل: {len(df)}")
+    c.drawString(50, height - 120, f"عدد المشاركين: {df['User'].nunique()}")
+    c.drawString(50, height - 140, f"تاريخ التحليل: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}")
+    
+    # حفظ الرسم البياني للأعضاء كصورة مؤقتة
+    user_counts = df['User'].value_counts().head(10)  # أهم 10 أشخاص فقط للـ PDF
+    fig, ax = plt.subplots(figsize=(6, 4))
+    user_counts.plot(kind='barh', ax=ax, color='#D4AF37')
+    ax.set_title("توزيع الرسائل حسب الأشخاص", fontsize=12, fontweight='bold')
+    ax.set_xlabel("عدد الرسائل")
+    plt.tight_layout()
+    
+    # حفظ الصورة في ملف مؤقت
+    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmpfile:
+        fig.savefig(tmpfile.name, format='png', bbox_inches='tight', dpi=100)
+        tmpfile_path = tmpfile.name
+    
+    plt.close(fig)
+    
+    # إدراج الصورة في PDF
+    img = ImageReader(tmpfile_path)
+    c.drawImage(img, 50, height - 400, width=300, height=200)
+    
+    # تنظيف الملف المؤقت
+    os.unlink(tmpfile_path)
+    
+    # إضافة الكلمات الأكثر تكراراً
+    c.setFillColorRGB(0.8, 0.6, 0.2)
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(400, height - 150, "🏆 الكلمات الأكثر تكراراً")
+    
+    c.setFillColorRGB(0, 0, 0)
+    c.setFont("Helvetica", 10)
+    top_words = analyzer.get_top_words(15)
+    y_position = height - 180
+    for i, (word, count) in enumerate(top_words, 1):
+        c.drawString(400, y_position, f"{i}. {word}: {count} مرة")
+        y_position -= 20
+        if y_position < 100:  # صفحة جديدة إذا لزم الأمر
+            c.showPage()
+            y_position = height - 50
+    
+    c.save()
+    pdf_buffer.seek(0)
+    return pdf_buffer
 
-    if not df.empty:
-        # الصف الأول: إحصائيات سريعة
-        col1, col2, col3 = st.columns(3)
-        col1.metric("إجمالي الرسائل", f"{len(df):,}")
-        col2.metric("عدد المشاركين", df['User'].nunique())
-        col3.metric("متوسط الكلمات/رسالة", round(df['Message'].str.split().str.len().mean(), 1))
-
-        st.markdown("---")
-
-        # الصف الثاني: الرسوم البيانية
-        left_column, right_column = st.columns(2)
-
-        with left_column:
-            st.subheader("👥 توزيع الرسائل حسب الأشخاص")
-            user_counts = df['User'].value_counts().reset_index()
-            user_counts.columns = ['المستخدم', 'عدد الرسائل']
-            fig_users = px.pie(user_counts, values='عدد الرسائل', names='المستخدم', 
-                             color_discrete_sequence=px.colors.sequential.Goldenrod)
-            fig_users.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="white")
-            st.plotly_chart(fig_users, use_container_width=True)
-
-        with right_column:
-            st.subheader("🏆 الكلمات العشر الأكثر تكراراً")
-            top_words = analyzer.get_top_words(10)
-            words_df = pd.DataFrame(top_words, columns=['الكلمة', 'التكرار'])
-            fig_words = px.bar(words_df, x='التكرار', y='الكلمة', orientation='h',
-                             color_discrete_sequence=['#D4AF37'])
-            fig_words.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="white")
-            st.plotly_chart(fig_words, use_container_width=True)
-
-        # عرض عينة من البيانات المنظمة
-        with st.expander("📝 عرض البيانات المحللة بالكامل"):
-            st.dataframe(df, use_container_width=True)
-            
-    else:
-        st.error("❌ لم يتم العثور على بيانات صالحة. تأكد من تصدير الدردشة بشكل صحيح من واتساب.")
-
-else:
-    st.info("💡 نصيحة: اذهب إلى واتساب -> الإعدادات -> الدردشات -> سجل الدردشات -> نقل الدردشة (بدون وسائط) للحصول على الملف.")
+# ثم أضف هذا الزر في نهاية الكود (قبل عرض البيانات)
+st.markdown("---")
+col1, col2, col3 = st.columns([1, 2, 1])
+with col2:
+    if st.button("📥 تحميل التقرير كـ PDF", use_container_width=True):
+        with st.spinner("جاري إنشاء التقرير..."):
+            pdf_file = generate_pdf_report(df, analyzer)
+            st.download_button(
+                label="اضغط لتحميل التقرير",
+                data=pdf_file,
+                file_name=f"whatsapp_report_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.pdf",
+                mime="application/pdf"
+            )
